@@ -1,6 +1,10 @@
 # GRAYLOG 6
 Scripts para ajudar na gerencia/administração do graylog por linha de comando.
 
+Caminhos:
+* /usr/local/sbin/graylogctl
+* /etc/bash_completion.d/graylogctl_completion
+
 OBS: Foram usados comandos basicos e somente 1 index_set
 
 # graylogctl
@@ -37,6 +41,6 @@ Script com diversos comandos/opções para a gerencia/administração do graylog
       onde:
         tipo: Deve informar [streams|roles|index_sets|permissions].
 
-# graylogctl_competion
+# graylogctl_completion
 Script para o autocompletar do graylogctl
 
