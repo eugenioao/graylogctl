@@ -81,7 +81,7 @@ EOF
 
 gl_criar_rolepadrao() {
 
-   $GRAYLOG_CMD -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X POST ${GRAYLOG_API_URL}/roles --data "$(gl_rolepadrao_json)"
+   $GRAYLOG_CMD "${CURL_OPTS[@]}" -X POST ${GRAYLOG_API_URL}/roles --data "$(gl_rolepadrao_json)"
    if [ $? -ne 0 ]; then
       echo -e "${RED}[ERRO]${NC} ao criar a role padrão!"
       return 1
@@ -202,11 +202,17 @@ if [ -z "$1" -o -z "$2" ]; then
 fi
 
 # Definição de variaveis globais
+# Definição de variaveis globais
 DOMINIO="local"
 GRAYLOG_API_URL="http://SERVIDOR:9000/api"
 GRAYLOG_TOKEN="TOKEN_DO_GRAYLOG:token"
 GRAYLOG_CMD="curl -s -u ${GRAYLOG_TOKEN}"
 GRAYLOG_ES_INDEX=000000
+CURL_OPTS=(
+   -H "Content-Type: application/json"
+   -H "X-Requested-By: cli"
+)
+
 
 if [ "$GRAYLOG_API_URL" = "http://SERVIDOR:9000/api" ]; then
    echo -e "${RED}[ERRO]${NC} a GRAYLOG_API_URL precisa ser alterada!"
@@ -283,7 +289,7 @@ case $ACAO in
        case $OPCAO in
             streams)
               STREAMDEFAULT="All events|All system events|Default Stream|haproxy HTTP 5XXs|haproxy HTTP 4XX|haproxy"
-              ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/streams?pretty=true | jq -r '.streams[] | select(.title | test ("'"$STREAMDEFAULT"'") | not ) | .title + " - " + .description' > /tmp/streams.lst
+              ${GRAYLOG_CMD} "${CURL_OPTS[@]}" -X GET ${GRAYLOG_API_URL}/streams?pretty=true | jq -r '.streams[] | select(.title | test ("'"$STREAMDEFAULT"'") | not ) | .title + " - " + .description' > /tmp/streams.lst
                if [ $? -ne 0 ]; then
                   echo -e "${RED}[ERRO]${NC} ao consultar as streams!"
                else
@@ -294,7 +300,7 @@ case $ACAO in
                fi
             ;;
             roles)
-              ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/roles?pretty=true | jq -r '.roles[] | .name + " - " + .description' > /tmp/roles.lst
+              ${GRAYLOG_CMD} "${CURL_OPTS[@]}" -X GET ${GRAYLOG_API_URL}/roles?pretty=true | jq -r '.roles[] | .name + " - " + .description' > /tmp/roles.lst
                if [ $? -ne 0 ]; then
                   echo -e "${RED}[ERRO]${NC} ao consultar as roles!"
                else
@@ -307,7 +313,7 @@ case $ACAO in
             ;;
             index_sets)
               INDEXDEFAULT="graylog|gl-events|gl-system-events"
-              ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/system/indices/index_sets | jq -r '.index_sets[] | select(.index_prefix | test ("'"$INDEXDEFAULT"'") | not ) | .index_prefix + " - " + .description' > /tmp/indices.lst
+              ${GRAYLOG_CMD} "${CURL_OPTS[@]}" -X GET ${GRAYLOG_API_URL}/system/indices/index_sets | jq -r '.index_sets[] | select(.index_prefix | test ("'"$INDEXDEFAULT"'") | not ) | .index_prefix + " - " + .description' > /tmp/indices.lst
                if [ $? -ne 0 ]; then
                   echo -e "${RED}[ERRO]${NC} ao consultar os indices!"
                else
@@ -318,7 +324,7 @@ case $ACAO in
                fi
             ;;
             permissions)
-               ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/system/permissions?pretty=true > /tmp/permissions.lst
+               ${GRAYLOG_CMD} "${CURL_OPTS[@]}" -X GET ${GRAYLOG_API_URL}/system/permissions?pretty=true > /tmp/permissions.lst
                if [ $? -ne 0 ]; then
                   echo -e "${RED}[ERRO]${NC} ao consultar os tipos de permissões!"
                else
@@ -344,3 +350,4 @@ case $ACAO in
 esac
 
 echo "Fim da execução"
+
