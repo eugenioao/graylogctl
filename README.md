@@ -5,7 +5,7 @@ Scripts para ajudar na gerencia/administração do graylog por linha de comando.
 Script com diversos comandos/opções para a gerencia/administração do graylog por linha de comando.
 
  Comandos:<br>
--[]   iniciar   - Inicia o serviço do graylog-server ou mongodb.<br>
+ []   iniciar   - Inicia o serviço do graylog-server ou mongodb.<br>
    parar     - Para o serviço do graylog-server ou mongodb.<br>
    reiniciar	- Para/Inicia o serviço do graylog-server ou mongodb.<br>
    criar     - Cria uma stream ou role padrão.<br>
