@@ -210,14 +210,17 @@ GRAYLOG_ES_INDEX=000000
 
 if [ "$GRAYLOG_API_URL" = "http://SERVIDOR:9000/api" ]; then
    echo -e "${RED}[ERRO]${NC} a GRAYLOG_API_URL precisa ser alterada!"
+   exit 1
 fi
 
-if [ "$GRAYLOG_TOKEN" ="TOKEN_DO_GRAYLOG:token" ]; then
+if [ "$GRAYLOG_TOKEN" == "TOKEN_DO_GRAYLOG:token" ]; then
    echo -e "${RED}[ERRO]${NC} o GRAYLOG_TOKEN precisa ser alterado!"
+   exit 1
 fi
 
 if [ "$GRAYLOG_ES_INDEX" = "000000" ]; then
    echo -e "${RED}[ERRO]${NC} o GRAYLOG_ES_INDEX precisa ser alterado!"
+   exit 1
 fi
 
 # Atribuição dos parametros recebidos
