@@ -12,6 +12,26 @@ Script com diversos comandos/opções para a gerencia/administração do graylog
  * <strong>excluir</strong>   - Excluir uma stream.<br>
  * <strong>listar</strong>    - Lista as streams, roles, index_sets ou tipos de permissões.<br><br>
 
+ Opções dos comandos:
+      criar [tipo] [nomeapl] <usuarios>
+   
+      onde:
+        tipo:	Deve informar [streams] ou [rolepadrao].
+        nomeapl:	Nome da stream que será criada.
+        usuarios:	Login do(s) usuario(s) do AD separado por virgula.
+   
+      excluir [nome]
+      Informar o nome da stream para a exclusão. Roles não serão excluidas.
+   
+      onde:
+        nome: Nome da stream que será excluida.
+   
+      listar [tipo]
+      Informar o tipo para a ação solicitada.
+
+   onde:
+     tipo: Deve informar [streams|roles|index_sets|permissions].
+
 # graylogctl_competion
 Script para o autocompletar do graylogctl
 
