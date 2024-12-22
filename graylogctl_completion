@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Script....: graylogctl_completion.sh
+# Script....: graylogctl_completion
 # Descricao.: Autocompletar do gerenciador do graylog
 # Autor.....: Eugenio Oliveira
 # Data .....: 22/12/2024
