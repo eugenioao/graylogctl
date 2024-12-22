@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# Script....: graylogctl_completion.sh
+# Descricao.: Autocompletar do gerenciador do graylog
+# Autor.....: Eugenio Oliveira
+# Data .....: 22/12/2024
+# Versão ...: 1.0
+
+if [ "$0" = "$BASH_SOURCE" ]; then
+   echo -e " Uso incorreto do arquivo '$0'. Este, deve ser usado apenas em 'source $0'\n"
+   exit -1
+fi
+
+function _complete_graylogctl() {
+    local cur prev opts opts2
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    opts='iniciar parar reiniciar criar excluir listar'
+    unset opts2
+    case "${prev}" in
+        iniciar|parar|reiniciar)
+            opts2="$(echo 'graylog-server mongod')"
+        ;;
+        criar|listar)
+            opts2="$(echo 'streams roles permissions')"
+        ;;
+        excluir)
+            opts2="$(echo 'streams')"
+        ;;
+    esac
+
+    if [[ "${COMP_CWORD}" = 1 ]]; then
+        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+    else
+        COMPREPLY=( $(compgen -W "${opts2}" -- ${cur}) )
+    fi
+
+    return 0
+}
+
+complete -F _complete_graylogctl graylogctl

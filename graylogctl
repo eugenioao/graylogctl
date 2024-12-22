@@ -1,0 +1,343 @@
+#!/bin/bash
+#
+# Script...: graylogctl
+# Descrição: Script de gerenciamento do Graylog
+# Autor....: Eugenio Oliveira
+# Data.....: 22/12/2024
+
+ESC=$(printf '\e')
+GREEN="${ESC}[92m"
+RED="${ESC}[91m"
+NC="${ESC}[0m"
+
+Ajuda() {
+
+   echo ""
+   echo " graylogctl - Script de gerenciamento do Graylog"
+   echo ""
+   echo " Use: "
+   echo "      $0 [iniciar|parar|reiniciar|criar|excluir|listar] [opções]"
+   echo ""
+   echo " Comandos:"
+   echo "   iniciar	Inicia o serviço do graylog-server ou mongodb."
+   echo "   parar	Para o serviço do graylog-server ou mongodb."
+   echo "   reiniciar	Para/Inicia o serviço do graylog-server ou mongodb."
+   echo "   criar	Cria uma stream ou role padrão."
+   echo "   excluir	Excluir uma stream."
+   echo "   listar	Lista as streams, roles, index_sets ou tipos de permissões."
+   echo ""
+   echo " Opções dos comandos:"
+   echo "   criar [tipo] [nomeapl] <usuarios>"
+   echo ""
+   echo "   onde:"
+   echo "     tipo:	Deve informar [streams] ou [rolepadrao]."
+   echo "     nomeapl:	Nome da stream que será criada."
+   echo "     usuarios:	Login do(s) usuario(s) do AD separado por virgula."
+   echo ""
+   echo "   excluir [nome]"
+   echo "   Informar o nome da stream para a exclusão. Roles não serão excluidas."
+   echo ""
+   echo "   onde:"
+   echo "     nome: Nome da stream que será excluida."
+   echo ""
+   echo "   listar [tipo]"
+   echo "   Informar o tipo para a ação solicitada."
+   echo ""
+   echo "   onde:"
+   echo "     tipo: Deve informar [streams|roles|index_sets|permissions]."
+   echo ""
+   echo ""
+   echo " Exemplos:"
+   echo "   $0 criar streams censo"
+   echo "   $0 criar streams censo eugenio.oliveira,erick.ribeiro"
+   echo ""
+
+}
+
+gl_rolepadrao_json() {
+cat << EOF
+{
+  "name": "Acesso Usuarios Leitura",
+  "description": "Role para permitir o acesso ao graylog sem visualização total",
+  "permissions": [
+        "clusterconfigentry:read",
+        "indexercluster:read",
+        "messagecount:read",
+        "journal:read",
+        "messages:analyze",
+        "metrics:read",
+        "fieldnames:read",
+        "buffers:read",
+        "system:read",
+        "jvmstats:read",
+        "decorators:read",
+        "throughput:read",
+        "messages:read"
+      ],
+  "read_only": false
+}
+EOF
+}
+
+gl_criar_rolepadrao() {
+
+   $GRAYLOG_CMD -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X POST ${GRAYLOG_API_URL}/roles --data "$(gl_rolepadrao_json)"
+   if [ $? -ne 0 ]; then
+      echo -e "${RED}[ERRO]${NC} ao criar a role padrão!"
+      return 1
+   fi
+
+}
+
+gl_stream_json() {
+   cat << EOF
+{
+  "index_set_id": "${GRAYLOG_ES_INDEX}",
+  "remove_matches_from_default_stream": "false",
+  "description": "${NOMESTREAM}",
+  "rules": [
+    {
+      "field": "appname",
+      "description": "Filtra as mensagens pelo nome da aplicação",
+      "inverted": "false",
+      "type": "1",
+      "value": "${NOMESTREAM}"
+    },
+    {
+      "field": "ambiente",
+      "description": "Filtra as mensagens pelo ambiente",
+      "inverted": "false",
+      "type": "5",
+      "value": ""
+    }
+  ],
+  "title": "${NOMESTREAM}"
+}
+EOF
+}
+
+gl_criar_stream() {
+
+   GRAYLOG_STREAMNAME=$(curl -s -u ${GRAYLOG_TOKEN} -X GET ${GRAYLOG_API_URL}/streams | jq -r '.streams[] | select(.title=="'"${NOMESTREAM}"'")')
+   if [ $? -ne 0 -o -n "$GRAYLOG_STREAMNAME" ]; then
+      return 1
+   fi
+
+   # Cria a stream
+   GRAYLOG_STREAMID=$(curl -s -u ${GRAYLOG_TOKEN} -H 'Content-Type: application/json' -H 'X-Requested-By: Script STI' -X POST --data "$(gl_stream_json)" ${GRAYLOG_API_URL}/streams | jq .stream_id | sed 's/"//g')
+   if [ $? -ne 0 ]; then
+      echo -e "${RED}[ERRO]${NC} para criar a stream ${NOMESTREAM}!"
+      return 1
+   fi
+
+   # Ativa a stream
+   curl -s -u ${GRAYLOG_TOKEN} -H 'Content-Type: application/json' -H 'X-Requested-By: Script STI' -X POST  ${GRAYLOG_API_URL}/streams/${GRAYLOG_STREAMID}/resume
+   if [ $? -ne 0 ]; then
+      echo -e "${RED}[ERRO]${NC} para ativar a stream ${NOMESTREAM}!"
+      return 1
+   fi
+   echo "${GREEN}[OK]${NC} A stream ${NOMESTREAM} foi criada!"
+}
+
+gl_atribuir_permissao() {
+
+   if [ -z "$1" ]; then
+      echo -e "     ${RED}[ERRO]${NC} faltou informar o nome do usuario!"
+      return 1
+   fi
+   LOGIN_DO_USUARIO=$1
+
+   USUARIOID=$(curl -s -u ${GRAYLOG_TOKEN} -H 'Content-Type: application/json' -H 'X-Requested-By: Script STI' -X GET ${GRAYLOG_API_URL}/users| jq -r '.users[] | select(.username=="'"$LOGIN_DO_USUARIO@$DOMINIO"'") | .id')
+   if [ -z "$USUARIOID" ]; then
+      echo -e "     ${RED}[ERRO]${NC} o login $1 não foi encontrado!"
+      return 1
+   fi
+
+   # Define a permissão para o usuario na stream
+   curl -s -u ${GRAYLOG_TOKEN} -H 'Content-Type: application/json' -H 'X-Requested-By: Script STI' -X POST  ${GRAYLOG_API_URL}/authz/shares/entities/grn::::stream:${GRAYLOG_STREAMID} --data-raw '{"selected_grantee_capabilities":{"grn::::user:'"$USUARIOID"'":"view"}}' 2>&1 >/dev/null
+   if [ $? -ne 0 ]; then
+      echo -e "     ${RED}[ERRO]${NC} ao conceder permissão para o usuário $1!"
+      return 1
+   fi
+   echo "     ${GREEN}[OK]${NC} - Concedido acesso ao usuário $1!"
+
+}
+
+gl_excluir_stream() {
+
+   if [ -z "$OPCAO" ]; then
+      echo -e "${RED}[ERRO]${NC} o nome da stream não foi informado!"
+      return 1
+   fi
+
+   if [ "$(echo ${OPCAO}|grep -iE 'All events|All system events|Default Stream|haproxy HTTP 5XXs|haproxy HTTP 4XX|haproxy')" ]; then
+      echo -e "${RED}[ERRO]${NC} a stream ${OPCAO} não pode ser excluida!"
+      return 1
+   fi
+
+   GRAYLOG_STREAMID=$(curl -s -u ${GRAYLOG_TOKEN} -X GET ${GRAYLOG_API_URL}/streams | jq -r '.streams[] | select(.title=="'"${OPCAO}"'")|.id')
+   if [ $? -ne 0 -o -z "$GRAYLOG_STREAMID" ]; then
+      echo -e "${RED}[ERRO]${NC} a stream ${OPCAO} não foi encontrada!"
+      return 1
+   fi
+
+   # Deleta a stream
+   curl -s -u ${GRAYLOG_TOKEN} -H 'Content-Type: application/json' -H 'X-Requested-By: Script STI' -X DELETE ${GRAYLOG_API_URL}/streams/$GRAYLOG_STREAMID 2>&1 >/dev/null
+   if [ $? -ne 0 ]; then
+      echo -e "${RED}[ERRO]${NC} para excluir a stream ${NOMESTREAM}!"
+      return 1
+   fi
+   echo -e "${GREEN}[OK]${NC} A stream ${NOMESTREAM} foi excluida!"
+
+}
+
+
+###############################################
+# Inicio dos procedimentos
+
+# Verifica se foi passado algum parametro (minimo de 2)
+if [ -z "$1" -o -z "$2" ]; then
+   Ajuda
+   exit 1
+fi
+
+# Definição de variaveis globais
+DOMINIO="local"
+GRAYLOG_API_URL="http://SERVIDOR:9000/api"
+GRAYLOG_TOKEN="TOKEN_DO_GRAYLOG:token"
+GRAYLOG_CMD="curl -s -u ${GRAYLOG_TOKEN}"
+GRAYLOG_ES_INDEX=000000
+
+if [ "$GRAYLOG_API_URL" = "http://SERVIDOR:9000/api" ]; then
+   echo -e "${RED}[ERRO]${NC} a GRAYLOG_API_URL precisa ser alterada!"
+fi
+
+if [ "$GRAYLOG_TOKEN" ="TOKEN_DO_GRAYLOG:token" ]; then
+   echo -e "${RED}[ERRO]${NC} o GRAYLOG_TOKEN precisa ser alterado!"
+fi
+
+if [ "$GRAYLOG_ES_INDEX" = "000000" ]; then
+   echo -e "${RED}[ERRO]${NC} o GRAYLOG_ES_INDEX precisa ser alterado!"
+fi
+
+# Atribuição dos parametros recebidos
+ACAO=$1
+OPCAO=$2
+NOMESTREAM=$3
+
+case $ACAO in
+
+     iniciar|parar|reiniciar)
+       COMANDO="$ACAO"
+       case $COMANDO in
+         iniciar) COMANDO="start" ;;
+         parar) COMANDO="stop" ;;
+         *) COMANDO="restart" ;;
+       esac
+       case $OPCAO in
+            graylog-server)
+               systemctl $COMANDO graylog-server.service
+            ;;
+            mongodb)
+               systemctl $COMANDO mongodb.service
+            ;;
+            *)
+             echo -e "${RED}[ERRO]${NC} o serviço é inválido!"
+            ;;
+        esac
+     ;;
+
+     criar)
+       case $OPCAO in
+            streams)
+              gl_criar_stream
+              if [ $? -ne 0 ]; then
+                 echo -e "${RED}[ERRO]${NC} - A strem ${NOMESTREAM} já existe!"
+              else
+                 USUARIOS=$4
+                 if [ -n "${USUARIOS}" ]; then
+                    USUARIOS=$(echo ${USUARIOS}|sed -e 's/,/ /g' -e 's/;/ /g')
+                    for USUARIO in $(echo ${USUARIOS}); do
+                        gl_atribuir_permissao $USUARIO
+                    done
+                 fi
+              fi
+            ;;
+            rolepadrao)
+              gl_criar_rolepadrao
+            ;;
+            *)
+              echo -e "${RED}[ERRO]${NC} a opção é inválida!"
+            ;;
+       esac
+     ;;
+
+     excluir)
+       gl_excluir_stream $OPCAO 
+     ;;
+
+     listar)
+       case $OPCAO in
+            streams)
+              STREAMDEFAULT="All events|All system events|Default Stream|haproxy HTTP 5XXs|haproxy HTTP 4XX|haproxy"
+              ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/streams?pretty=true | jq -r '.streams[] | select(.title | test ("'"$STREAMDEFAULT"'") | not ) | .title + " - " + .description' > /tmp/streams.lst
+               if [ $? -ne 0 ]; then
+                  echo -e "${RED}[ERRO]${NC} ao consultar as streams!"
+               else
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  echo "                        LISTA DE STREAMS"
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  cat /tmp/streams.lst
+               fi
+            ;;
+            roles)
+              ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/roles?pretty=true | jq -r '.roles[] | .name + " - " + .description' > /tmp/roles.lst
+               if [ $? -ne 0 ]; then
+                  echo -e "${RED}[ERRO]${NC} ao consultar as roles!"
+               else
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  echo "                 LISTA DE ROLES"
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  cat /tmp/roles.lst
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+               fi
+            ;;
+            index_sets)
+              INDEXDEFAULT="graylog|gl-events|gl-system-events"
+              ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/system/indices/index_sets | jq -r '.index_sets[] | select(.index_prefix | test ("'"$INDEXDEFAULT"'") | not ) | .index_prefix + " - " + .description' > /tmp/indices.lst
+               if [ $? -ne 0 ]; then
+                  echo -e "${RED}[ERRO]${NC} ao consultar os indices!"
+               else
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  echo "                        LISTA DE INDICES"
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  cat /tmp/indices.lst
+               fi
+            ;;
+            permissions)
+               ${GRAYLOG_CMD} -H 'Content-Type: application/json' -H 'X-Requested-By: cli' -X GET ${GRAYLOG_API_URL}/system/permissions?pretty=true > /tmp/permissions.lst
+               if [ $? -ne 0 ]; then
+                  echo -e "${RED}[ERRO]${NC} ao consultar os tipos de permissões!"
+               else
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  echo "          LISTA DE TIPOS DE PERMISSÕES"
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+                  cat /tmp/permissions.lst
+                  echo ""
+                  echo "+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*"
+               fi
+            ;;
+            *)
+             echo -e "${RED}[ERRO]${NC} o tipo é inválido!"
+            ;;
+        esac
+     ;;
+
+     *)
+       Ajuda
+       exit 1
+     ;;
+
+esac
+
+echo "Fim da execução"
