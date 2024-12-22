@@ -1,10 +1,12 @@
 # GRAYLOG 6
 Scripts para ajudar na gerencia/administração do graylog por linha de comando.
 
+OBS: Foram usados comandos basicos e somente 1 index_set
+
 # graylogctl
 Script com diversos comandos/opções para a gerencia/administração do graylog por linha de comando.
 
- Comandos:<br>
+ Comandos:
            
       iniciar       - Inicia o serviço do graylog-server ou mongodb.
       parar         - Para o serviço do graylog-server ou mongodb.
